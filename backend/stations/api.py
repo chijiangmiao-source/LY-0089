@@ -5,12 +5,14 @@ from typing import List
 from .models import ServiceStation
 from .schemas import StationIn, StationOut
 from carts.models import Cart
+from reservations.utils import cleanup_expired_reservations
 
 router = Router()
 
 
 @router.get('/', response=List[StationOut])
 def list_stations(request):
+    cleanup_expired_reservations()
     stations = ServiceStation.objects.all()
     result = []
     for station in stations:
@@ -32,6 +34,7 @@ def list_stations(request):
 
 @router.get('/{station_id}', response=StationOut)
 def get_station(request, station_id: int):
+    cleanup_expired_reservations()
     station = get_object_or_404(ServiceStation, id=station_id)
     current_count = Cart.objects.filter(station_id=station.id, status='available').count()
     return {

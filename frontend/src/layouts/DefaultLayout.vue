@@ -48,6 +48,7 @@ const menuItems = [
   { title: '调度看板', to: '/dashboard', icon: 'mdi-view-dashboard' },
   { title: '服务点管理', to: '/stations', icon: 'mdi-map-marker' },
   { title: '推车档案', to: '/carts', icon: 'mdi-cart' },
+  { title: '推车预约', to: '/reservations', icon: 'mdi-calendar-check' },
   { title: '借出登记', to: '/borrow', icon: 'mdi-arrow-up-bold-circle' },
   { title: '归还登记', to: '/return', icon: 'mdi-arrow-down-bold-circle' },
   { title: '借还记录', to: '/rentals', icon: 'mdi-history' },

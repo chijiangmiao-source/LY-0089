@@ -23,6 +23,7 @@ const routes: RouteRecordRaw[] = [
       { path: 'stranded', name: 'Stranded', component: () => import('@/views/Stranded.vue') },
       { path: 'transfers', name: 'Transfers', component: () => import('@/views/Transfers.vue') },
       { path: 'cleaning', name: 'Cleaning', component: () => import('@/views/Cleaning.vue') },
+      { path: 'reservations', name: 'Reservations', component: () => import('@/views/Reservations.vue') },
     ],
   },
 ]

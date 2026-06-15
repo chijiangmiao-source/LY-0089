@@ -22,15 +22,22 @@ class Command(BaseCommand):
                 reservation.status = 'expired'
                 reservation.save()
 
-                if reservation.cart:
+                if reservation.cart and reservation.cart.status == 'reserved':
                     reservation.cart.status = 'available'
                     reservation.cart.save()
 
                 count += 1
+                cart_status_note = ''
+                if reservation.cart:
+                    if reservation.cart.status == 'reserved':
+                        cart_status_note = f', 推车已释放为可用'
+                    else:
+                        cart_status_note = f', 推车状态为{reservation.cart.status}，跳过状态修改'
                 self.stdout.write(
                     f'  释放预约 {reservation.reservation_no} '
                     f'(用户: {reservation.user_phone}, '
-                    f'推车: {reservation.cart.cart_no if reservation.cart else "无"})'
+                    f'推车: {reservation.cart.cart_no if reservation.cart else "无"}'
+                    f'{cart_status_note})'
                 )
 
         self.stdout.write(self.style.SUCCESS(f'处理完成，共释放 {count} 个过期预约'))

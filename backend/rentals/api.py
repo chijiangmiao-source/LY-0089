@@ -11,6 +11,7 @@ from ninja.pagination import paginate
 from carts.models import Cart
 from stations.models import ServiceStation
 from reservations.models import CartReservation
+from reservations.utils import cleanup_expired_reservations
 from .models import RentalRecord
 from .schemas import BorrowIn, ReturnIn, RentalOut
 
@@ -47,6 +48,7 @@ def generate_rental_no() -> str:
 @router.get('/', response=list[RentalOut])
 @paginate
 def list_rentals(request, stage: str = None, user_phone: str = None):
+    cleanup_expired_reservations()
     queryset = RentalRecord.objects.select_related('borrow_station', 'return_station', 'cart').all()
     if stage:
         queryset = queryset.filter(stage=stage)
@@ -57,6 +59,7 @@ def list_rentals(request, stage: str = None, user_phone: str = None):
 
 @router.get('/{rental_id}', response=RentalOut)
 def get_rental(request, rental_id: int):
+    cleanup_expired_reservations()
     record = get_object_or_404(
         RentalRecord.objects.select_related('borrow_station', 'return_station', 'cart'),
         id=rental_id
@@ -67,6 +70,7 @@ def get_rental(request, rental_id: int):
 @router.post('/borrow', response=RentalOut)
 @transaction.atomic
 def borrow_cart(request, payload: BorrowIn):
+    cleanup_expired_reservations()
     cart = get_object_or_404(Cart, id=payload.cart_id)
     if cart.status not in ['available', 'reserved']:
         raise HttpError(400, '该推车不可借出')
@@ -82,8 +86,9 @@ def borrow_cart(request, payload: BorrowIn):
         if active_reservation.is_expired:
             active_reservation.status = 'expired'
             active_reservation.save()
-            cart.status = 'available'
-            cart.save()
+            if cart.status == 'reserved':
+                cart.status = 'available'
+                cart.save()
             raise HttpError(400, '该推车预约已超时失效，请重新预约')
 
         active_reservation.status = 'completed'
@@ -138,6 +143,7 @@ def borrow_cart(request, payload: BorrowIn):
 @router.post('/return', response=RentalOut)
 @transaction.atomic
 def return_cart(request, payload: ReturnIn):
+    cleanup_expired_reservations()
     record = get_object_or_404(RentalRecord, rental_no=payload.rental_no)
     if record.stage not in ('borrowing', 'overdue'):
         raise HttpError(400, '该记录状态不允许归还')
@@ -173,6 +179,7 @@ def return_cart(request, payload: ReturnIn):
 
 @router.get('/check-phone/{phone}')
 def check_phone(request, phone: str):
+    cleanup_expired_reservations()
     overdue_hours_threshold = settings.RENTAL_OVERDUE_HOURS
     now = timezone.now()
     unreturned_records = RentalRecord.objects.filter(

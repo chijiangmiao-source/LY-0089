@@ -12,6 +12,7 @@ from stranded.models import StrandedRecord
 from transfers.models import TransferOrder
 from rentals.models import RentalRecord
 from reservations.models import CartReservation
+from reservations.utils import cleanup_expired_reservations
 
 router = Router()
 
@@ -94,6 +95,7 @@ class FloorReservationHeatOut(BaseModel):
 
 @router.get('/overview', response=OverviewOut)
 def get_overview(request):
+    cleanup_expired_reservations()
     total_carts = Cart.objects.count()
     available_carts = Cart.objects.filter(status='available').count()
     reserved_carts = Cart.objects.filter(status='reserved').count()
@@ -117,6 +119,7 @@ def get_overview(request):
 
 @router.get('/floor-shortage', response=List[FloorShortageOut])
 def get_floor_shortage(request):
+    cleanup_expired_reservations()
     stations = ServiceStation.objects.filter(is_active=True).order_by('floor')
     floor_data = {}
 
@@ -162,6 +165,7 @@ def get_floor_shortage(request):
 
 @router.get('/stranded-distribution', response=StrandedDistributionOut)
 def get_stranded_distribution(request):
+    cleanup_expired_reservations()
     now = timezone.now()
     records = StrandedRecord.objects.all()
 
@@ -195,6 +199,7 @@ def get_stranded_distribution(request):
 
 @router.get('/transfer-rate', response=TransferRateOut)
 def get_transfer_rate(request):
+    cleanup_expired_reservations()
     total_transfers = TransferOrder.objects.count()
     completed_transfers = TransferOrder.objects.filter(status='completed').count()
     pending_transfers = TransferOrder.objects.filter(status='pending').count()
@@ -216,6 +221,7 @@ def get_transfer_rate(request):
 
 @router.get('/overdue-list', response=List[OverdueRentalOut])
 def get_overdue_list(request):
+    cleanup_expired_reservations()
     now = timezone.now()
     overdue_hours_threshold = settings.RENTAL_OVERDUE_HOURS
     threshold_time = now - timedelta(hours=overdue_hours_threshold)
@@ -246,6 +252,7 @@ def get_overdue_list(request):
 
 @router.get('/upcoming-expiring-reservations', response=List[ReservationOut])
 def get_upcoming_expiring_reservations(request, minutes: int = 5):
+    cleanup_expired_reservations()
     now = timezone.now()
     threshold_time = now + timedelta(minutes=minutes)
 
@@ -276,6 +283,7 @@ def get_upcoming_expiring_reservations(request, minutes: int = 5):
 
 @router.get('/floor-reservation-heat', response=List[FloorReservationHeatOut])
 def get_floor_reservation_heat(request, hours: int = 24):
+    cleanup_expired_reservations()
     now = timezone.now()
     start_time = now - timedelta(hours=hours)
 

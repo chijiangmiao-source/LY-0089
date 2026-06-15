@@ -4,6 +4,7 @@ from django.utils import timezone
 from ninja import Router, Query
 from ninja.pagination import paginate
 
+from reservations.utils import cleanup_expired_reservations
 from .models import Cart
 from .schemas import CartIn, CartOut
 
@@ -29,12 +30,14 @@ def cart_to_out(cart: Cart) -> CartOut:
 @router.get('/', response=list[CartOut])
 @paginate
 def list_carts(request):
+    cleanup_expired_reservations()
     queryset = Cart.objects.select_related('station').all()
     return [cart_to_out(cart) for cart in queryset]
 
 
 @router.get('/{cart_id}', response=CartOut)
 def get_cart(request, cart_id: int):
+    cleanup_expired_reservations()
     cart = get_object_or_404(Cart.objects.select_related('station'), id=cart_id)
     return cart_to_out(cart)
 

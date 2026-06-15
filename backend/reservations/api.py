@@ -13,6 +13,7 @@ from stations.models import ServiceStation
 from rentals.models import RentalRecord
 from .models import CartReservation
 from .schemas import ReservationCreateIn, ReservationOut, ReservationPickupIn
+from .utils import cleanup_expired_reservations
 
 
 router = Router()
@@ -46,6 +47,7 @@ def reservation_to_out(reservation: CartReservation) -> ReservationOut:
 @router.get('/', response=list[ReservationOut])
 @paginate
 def list_reservations(request, status: str = None, user_phone: str = None, station_id: int = None):
+    cleanup_expired_reservations()
     queryset = CartReservation.objects.select_related('station', 'cart').all()
     if status:
         queryset = queryset.filter(status=status)
@@ -58,6 +60,7 @@ def list_reservations(request, status: str = None, user_phone: str = None, stati
 
 @router.get('/{reservation_id}', response=ReservationOut)
 def get_reservation(request, reservation_id: int):
+    cleanup_expired_reservations()
     reservation = get_object_or_404(
         CartReservation.objects.select_related('station', 'cart'),
         id=reservation_id
@@ -68,6 +71,7 @@ def get_reservation(request, reservation_id: int):
 @router.post('/', response=ReservationOut)
 @transaction.atomic
 def create_reservation(request, payload: ReservationCreateIn):
+    cleanup_expired_reservations()
     station = get_object_or_404(ServiceStation, id=payload.station_id)
 
     existing_active = CartReservation.objects.filter(
@@ -115,6 +119,7 @@ def create_reservation(request, payload: ReservationCreateIn):
 @router.put('/{reservation_id}/cancel', response=ReservationOut)
 @transaction.atomic
 def cancel_reservation(request, reservation_id: int):
+    cleanup_expired_reservations()
     reservation = get_object_or_404(
         CartReservation.objects.select_related('station', 'cart'),
         id=reservation_id
@@ -125,7 +130,7 @@ def cancel_reservation(request, reservation_id: int):
     reservation.status = 'cancelled'
     reservation.save()
 
-    if reservation.cart:
+    if reservation.cart and reservation.cart.status == 'reserved':
         reservation.cart.status = 'available'
         reservation.cart.save()
 
@@ -146,7 +151,7 @@ def expire_expired_reservations(request):
         reservation.status = 'expired'
         reservation.save()
 
-        if reservation.cart:
+        if reservation.cart and reservation.cart.status == 'reserved':
             reservation.cart.status = 'available'
             reservation.cart.save()
         count += 1
@@ -157,6 +162,7 @@ def expire_expired_reservations(request):
 @router.post('/pickup', response=dict)
 @transaction.atomic
 def pickup_reserved_cart(request, payload: ReservationPickupIn):
+    cleanup_expired_reservations()
     from rentals.api import generate_rental_no, rental_to_out
 
     reservation = get_object_or_404(
@@ -170,7 +176,7 @@ def pickup_reserved_cart(request, payload: ReservationPickupIn):
     if reservation.is_expired:
         reservation.status = 'expired'
         reservation.save()
-        if reservation.cart:
+        if reservation.cart and reservation.cart.status == 'reserved':
             reservation.cart.status = 'available'
             reservation.cart.save()
         raise HttpError(400, '预约已超时失效')
@@ -233,6 +239,7 @@ def pickup_reserved_cart(request, payload: ReservationPickupIn):
 
 @router.get('/check-active/{phone}')
 def check_active_reservation(request, phone: str):
+    cleanup_expired_reservations()
     active_reservation = CartReservation.objects.filter(
         user_phone=phone,
         status='active'
