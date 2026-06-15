@@ -2,6 +2,7 @@ import random
 from datetime import datetime
 from django.shortcuts import get_object_or_404
 from django.db import transaction
+from django.utils import timezone
 from ninja import Router, Query
 from ninja.errors import HttpError
 from ninja.pagination import paginate
@@ -15,7 +16,7 @@ router = Router()
 
 
 def generate_transfer_no():
-    now = datetime.now()
+    now = timezone.now()
     timestamp = now.strftime('%Y%m%d%H%M%S')
     random_suffix = ''.join([str(random.randint(0, 9)) for _ in range(4)])
     return f'TF{timestamp}{random_suffix}'
@@ -68,6 +69,8 @@ def get_transfer(request, transfer_id: int):
 def create_transfer(request, payload: TransferCreateIn):
     cart = get_object_or_404(Cart, id=payload.cart_id)
     if cart.status != 'available':
+        if cart.status == 'reserved':
+            raise HttpError(400, '该推车已被预约，不允许调拨')
         raise HttpError(400, '推车当前状态不允许调拨')
     if payload.from_station_id == payload.to_station_id:
         raise HttpError(400, '源站和目标站不能相同')
@@ -101,7 +104,7 @@ def start_transfer(request, transfer_id: int):
     if transfer.status != 'pending':
         raise HttpError(400, '只有待出发状态的调拨单可以开始')
     transfer.status = 'transiting'
-    transfer.started_at = datetime.now()
+    transfer.started_at = timezone.now()
     transfer.save()
     return transfer_to_out(transfer)
 
@@ -116,7 +119,7 @@ def complete_transfer(request, transfer_id: int):
     if transfer.status != 'transiting':
         raise HttpError(400, '只有运输中状态的调拨单可以完成')
     transfer.status = 'completed'
-    transfer.completed_at = datetime.now()
+    transfer.completed_at = timezone.now()
     transfer.save()
 
     cart = transfer.cart

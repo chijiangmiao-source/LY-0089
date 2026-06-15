@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta
 from django.conf import settings
 from django.db.models import Count, Sum, Q
+from django.utils import timezone
 from ninja import Router
 from pydantic import BaseModel
 from typing import List, Optional
@@ -10,6 +11,7 @@ from stations.models import ServiceStation
 from stranded.models import StrandedRecord
 from transfers.models import TransferOrder
 from rentals.models import RentalRecord
+from reservations.models import CartReservation
 
 router = Router()
 
@@ -17,10 +19,12 @@ router = Router()
 class OverviewOut(BaseModel):
     total_carts: int
     available_carts: int
+    reserved_carts: int
     borrowed_carts: int
     stranded_carts: int
     transferring_carts: int
     total_stations: int
+    active_reservations: int
 
 
 class StationShortageOut(BaseModel):
@@ -68,22 +72,46 @@ class OverdueRentalOut(BaseModel):
     overdue_hours: float
 
 
+class ReservationOut(BaseModel):
+    id: int
+    reservation_no: str
+    user_phone: str
+    station_id: int
+    station_name: str
+    cart_id: Optional[int] = None
+    cart_no: Optional[str] = None
+    reserve_time: datetime
+    expire_time: datetime
+    minutes_left: float
+
+
+class FloorReservationHeatOut(BaseModel):
+    floor: int
+    total_reservations: int
+    active_reservations: int
+    stations: List[dict]
+
+
 @router.get('/overview', response=OverviewOut)
 def get_overview(request):
     total_carts = Cart.objects.count()
     available_carts = Cart.objects.filter(status='available').count()
+    reserved_carts = Cart.objects.filter(status='reserved').count()
     borrowed_carts = Cart.objects.filter(status='borrowed').count()
     stranded_carts = Cart.objects.filter(status='stranded').count()
     transferring_carts = Cart.objects.filter(status='transferring').count()
     total_stations = ServiceStation.objects.filter(is_active=True).count()
+    active_reservations = CartReservation.objects.filter(status='active').count()
 
     return OverviewOut(
         total_carts=total_carts,
         available_carts=available_carts,
+        reserved_carts=reserved_carts,
         borrowed_carts=borrowed_carts,
         stranded_carts=stranded_carts,
         transferring_carts=transferring_carts,
         total_stations=total_stations,
+        active_reservations=active_reservations,
     )
 
 
@@ -134,7 +162,7 @@ def get_floor_shortage(request):
 
 @router.get('/stranded-distribution', response=StrandedDistributionOut)
 def get_stranded_distribution(request):
-    now = datetime.now()
+    now = timezone.now()
     records = StrandedRecord.objects.all()
 
     less_than_1h = 0
@@ -188,7 +216,7 @@ def get_transfer_rate(request):
 
 @router.get('/overdue-list', response=List[OverdueRentalOut])
 def get_overdue_list(request):
-    now = datetime.now()
+    now = timezone.now()
     overdue_hours_threshold = settings.RENTAL_OVERDUE_HOURS
     threshold_time = now - timedelta(hours=overdue_hours_threshold)
 
@@ -213,4 +241,79 @@ def get_overdue_list(request):
             overdue_hours=round(duration_hours, 2),
         ))
 
+    return result
+
+
+@router.get('/upcoming-expiring-reservations', response=List[ReservationOut])
+def get_upcoming_expiring_reservations(request, minutes: int = 5):
+    now = timezone.now()
+    threshold_time = now + timedelta(minutes=minutes)
+
+    queryset = CartReservation.objects.select_related('station', 'cart').filter(
+        status='active',
+        expire_time__gt=now,
+        expire_time__lte=threshold_time
+    ).order_by('expire_time')
+
+    result = []
+    for reservation in queryset:
+        minutes_left = (reservation.expire_time - now).total_seconds() / 60
+        result.append(ReservationOut(
+            id=reservation.id,
+            reservation_no=reservation.reservation_no,
+            user_phone=reservation.user_phone,
+            station_id=reservation.station_id,
+            station_name=reservation.station.name if reservation.station else '',
+            cart_id=reservation.cart_id,
+            cart_no=reservation.cart.cart_no if reservation.cart else None,
+            reserve_time=reservation.reserve_time,
+            expire_time=reservation.expire_time,
+            minutes_left=round(minutes_left, 2),
+        ))
+
+    return result
+
+
+@router.get('/floor-reservation-heat', response=List[FloorReservationHeatOut])
+def get_floor_reservation_heat(request, hours: int = 24):
+    now = timezone.now()
+    start_time = now - timedelta(hours=hours)
+
+    stations = ServiceStation.objects.filter(is_active=True).order_by('floor')
+    floor_data = {}
+
+    for station in stations:
+        total_reservations = CartReservation.objects.filter(
+            station_id=station.id,
+            created_at__gte=start_time
+        ).count()
+        active_reservations = CartReservation.objects.filter(
+            station_id=station.id,
+            status='active'
+        ).count()
+
+        if station.floor not in floor_data:
+            floor_data[station.floor] = {
+                'floor': station.floor,
+                'total_reservations': 0,
+                'active_reservations': 0,
+                'stations': [],
+            }
+
+        floor_data[station.floor]['total_reservations'] += total_reservations
+        floor_data[station.floor]['active_reservations'] += active_reservations
+        floor_data[station.floor]['stations'].append({
+            'station_id': station.id,
+            'station_name': station.name,
+            'total_reservations': total_reservations,
+            'active_reservations': active_reservations,
+        })
+
+    result = []
+    for floor in sorted(floor_data.keys()):
+        data = floor_data[floor]
+        data['stations'].sort(key=lambda x: x['total_reservations'], reverse=True)
+        result.append(FloorReservationHeatOut(**data))
+
+    result.sort(key=lambda x: x.total_reservations, reverse=True)
     return result

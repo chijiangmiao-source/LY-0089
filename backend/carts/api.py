@@ -1,5 +1,6 @@
 from datetime import datetime
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from ninja import Router, Query
 from ninja.pagination import paginate
 
@@ -75,7 +76,7 @@ def delete_cart(request, cart_id: int):
 @router.post('/{cart_id}/clean', response=CartOut)
 def clean_cart(request, cart_id: int):
     cart = get_object_or_404(Cart.objects.select_related('station'), id=cart_id)
-    cart.last_clean_time = datetime.now()
+    cart.last_clean_time = timezone.now()
     cart.status = 'available'
     cart.save()
     return cart_to_out(cart)

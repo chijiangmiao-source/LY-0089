@@ -1,6 +1,7 @@
 from datetime import datetime
 from django.shortcuts import get_object_or_404
 from django.db import transaction
+from django.utils import timezone
 from ninja import Router, Query
 from ninja.errors import HttpError
 from ninja.pagination import paginate
@@ -13,7 +14,7 @@ router = Router()
 
 
 def stranded_to_out(record: StrandedRecord) -> StrandedOut:
-    now = datetime.now()
+    now = timezone.now()
     if record.recycled_at:
         duration = (record.recycled_at - record.reported_at).total_seconds() / 3600
     else:
@@ -60,8 +61,10 @@ def report_stranded(request, payload: StrandedReportIn):
     cart = get_object_or_404(Cart, id=payload.cart_id)
     if cart.status == 'transferring':
         raise HttpError(400, '调拨中的推车不能上报滞留')
+    if cart.status == 'reserved':
+        raise HttpError(400, '已预约的推车不能上报滞留')
 
-    now = datetime.now()
+    now = timezone.now()
     record = StrandedRecord.objects.create(
         cart_id=payload.cart_id,
         report_station_id=payload.report_station_id,
@@ -103,7 +106,7 @@ def complete_recycle(request, record_id: int):
     if record.status != 'recycling':
         raise HttpError(400, '只有回收中状态的记录可以完成回收')
 
-    now = datetime.now()
+    now = timezone.now()
     record.status = 'recycled'
     record.recycled_at = now
     record.save()

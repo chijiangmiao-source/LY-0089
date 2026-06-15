@@ -43,6 +43,7 @@ from rentals.api import router as rentals_router
 from transfers.api import router as transfers_router
 from stranded.api import router as stranded_router
 from dashboard.api import router as dashboard_router
+from reservations.api import router as reservations_router
 
 api.add_router('/auth', users_router, tags=['认证与用户'])
 api.add_router('/stations', stations_router, tags=['服务点管理'])
@@ -51,3 +52,4 @@ api.add_router('/rentals', rentals_router, tags=['借还登记'])
 api.add_router('/transfers', transfers_router, tags=['跨点调拨'])
 api.add_router('/stranded', stranded_router, tags=['滞留上报'])
 api.add_router('/dashboard', dashboard_router, tags=['调度看板'])
+api.add_router('/reservations', reservations_router, tags=['预约管理'])

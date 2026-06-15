@@ -27,6 +27,7 @@ INSTALLED_APPS = [
     'transfers',
     'stranded',
     'dashboard',
+    'reservations',
 ]
 
 MIDDLEWARE = [
@@ -95,3 +96,5 @@ JWT_SECRET = os.getenv('JWT_SECRET', SECRET_KEY)
 JWT_EXPIRE_HOURS = int(os.getenv('JWT_EXPIRE_HOURS', '24'))
 
 RENTAL_OVERDUE_HOURS = int(os.getenv('RENTAL_OVERDUE_HOURS', '4'))
+
+RESERVATION_EXPIRE_MINUTES = int(os.getenv('RESERVATION_EXPIRE_MINUTES', '15'))

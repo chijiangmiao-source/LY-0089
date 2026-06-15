@@ -3,12 +3,14 @@ from datetime import datetime, timedelta
 from django.conf import settings
 from django.shortcuts import get_object_or_404
 from django.db import transaction
+from django.utils import timezone
 from ninja import Router, Query
 from ninja.errors import HttpError
 from ninja.pagination import paginate
 
 from carts.models import Cart
 from stations.models import ServiceStation
+from reservations.models import CartReservation
 from .models import RentalRecord
 from .schemas import BorrowIn, ReturnIn, RentalOut
 
@@ -36,7 +38,7 @@ def rental_to_out(record: RentalRecord) -> RentalOut:
 
 
 def generate_rental_no() -> str:
-    now = datetime.now()
+    now = timezone.now()
     time_part = now.strftime('%Y%m%d%H%M%S')
     random_part = ''.join(random.choices('0123456789', k=4))
     return f'RL{time_part}{random_part}'
@@ -66,15 +68,41 @@ def get_rental(request, rental_id: int):
 @transaction.atomic
 def borrow_cart(request, payload: BorrowIn):
     cart = get_object_or_404(Cart, id=payload.cart_id)
-    if cart.status != 'available':
+    if cart.status not in ['available', 'reserved']:
         raise HttpError(400, '该推车不可借出')
+
+    if cart.status == 'reserved':
+        active_reservation = CartReservation.objects.filter(
+            cart_id=cart.id,
+            status='active',
+            user_phone=payload.user_phone
+        ).first()
+        if not active_reservation:
+            raise HttpError(400, '该推车已被其他用户预约，请先取消预约或选择其他推车')
+        if active_reservation.is_expired:
+            active_reservation.status = 'expired'
+            active_reservation.save()
+            cart.status = 'available'
+            cart.save()
+            raise HttpError(400, '该推车预约已超时失效，请重新预约')
+
+        active_reservation.status = 'completed'
+        active_reservation.pickup_time = timezone.now()
+        active_reservation.save()
+
+    active_reservation_check = CartReservation.objects.filter(
+        user_phone=payload.user_phone,
+        status='active'
+    ).exclude(cart_id=cart.id).first()
+    if active_reservation_check and active_reservation_check.cart_id != cart.id:
+        raise HttpError(400, '该手机号已有进行中的预约，请先使用或取消预约')
 
     overdue_unreturned = RentalRecord.objects.filter(
         user_phone=payload.user_phone,
         stage__in=['borrowing', 'overdue']
     )
     overdue_hours_threshold = settings.RENTAL_OVERDUE_HOURS
-    now_check = datetime.now()
+    now_check = timezone.now()
     can_borrow = True
     for rec in overdue_unreturned:
         duration = (now_check - rec.borrow_time).total_seconds() / 3600
@@ -87,7 +115,7 @@ def borrow_cart(request, payload: BorrowIn):
     borrow_station = get_object_or_404(ServiceStation, id=payload.borrow_station_id)
 
     rental_no = generate_rental_no()
-    now = datetime.now()
+    now = timezone.now()
 
     record = RentalRecord.objects.create(
         rental_no=rental_no,
@@ -120,7 +148,7 @@ def return_cart(request, payload: ReturnIn):
 
     return_station = get_object_or_404(ServiceStation, id=payload.return_station_id)
 
-    now = datetime.now()
+    now = timezone.now()
     record.return_time = now
     record.return_station = return_station
     record.stage = 'returned'
@@ -146,7 +174,7 @@ def return_cart(request, payload: ReturnIn):
 @router.get('/check-phone/{phone}')
 def check_phone(request, phone: str):
     overdue_hours_threshold = settings.RENTAL_OVERDUE_HOURS
-    now = datetime.now()
+    now = timezone.now()
     unreturned_records = RentalRecord.objects.filter(
         user_phone=phone,
         stage__in=['borrowing', 'overdue']
@@ -158,7 +186,31 @@ def check_phone(request, phone: str):
                 'can_borrow': False,
                 'reason': '该手机号存在逾期未还记录，不能借车'
             }
+
+    active_reservation = CartReservation.objects.filter(
+        user_phone=phone,
+        status='active'
+    ).first()
+    if active_reservation:
+        if active_reservation.is_expired:
+            return {
+                'can_borrow': True,
+                'has_reservation': True,
+                'reservation_expired': True,
+                'reason': '存在已超时的预约，已自动失效'
+            }
+        return {
+            'can_borrow': True,
+            'has_reservation': True,
+            'reservation_expired': False,
+            'reservation_no': active_reservation.reservation_no,
+            'cart_id': active_reservation.cart_id,
+            'expire_time': active_reservation.expire_time,
+            'reason': '存在进行中的预约'
+        }
+
     return {
         'can_borrow': True,
+        'has_reservation': False,
         'reason': ''
     }

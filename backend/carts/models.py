@@ -9,6 +9,7 @@ class Cart(models.Model):
 
     STATUS_CHOICES = [
         ('available', '可用'),
+        ('reserved', '已预约'),
         ('borrowed', '借出中'),
         ('stranded', '滞留'),
         ('transferring', '调拨中'),
@@ -18,6 +19,7 @@ class Cart(models.Model):
 
     STATUS_DISPLAY = {
         'available': '可用',
+        'reserved': '已预约',
         'borrowed': '借出中',
         'stranded': '滞留',
         'transferring': '调拨中',
