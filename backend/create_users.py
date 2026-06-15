@@ -37,27 +37,29 @@ def create_default_users():
     for data in users_data:
         username = data['username']
         if User.objects.filter(username=username).exists():
-            print(f'⚠  用户已存在，跳过: {username}')
+            print(f'用户已存在，跳过: {username}')
             continue
 
-        is_super = data.pop('is_superuser')
-        is_staff_flag = data.pop('is_staff')
-        password = data.pop('password')
+        user_data = data.copy()
+        is_super = user_data.pop('is_superuser')
+        is_staff_flag = user_data.pop('is_staff')
+        password = user_data.pop('password')
+        user_data.pop('username')
 
         if is_super:
             user = User.objects.create_superuser(
                 username=username,
                 password=password,
-                **data,
+                **user_data,
             )
         else:
             user = User.objects.create_user(
                 username=username,
                 password=password,
                 is_staff=is_staff_flag,
-                **data,
+                **user_data,
             )
-        print(f'✓ 创建用户成功: {username} / {password}（{user.full_name}）')
+        print(f'创建用户成功: {username} / {password}（{user.full_name}）')
 
     print('=== 完成 ===')
 
