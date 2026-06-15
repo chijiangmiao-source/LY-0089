@@ -31,6 +31,7 @@ def rental_to_out(record: RentalRecord) -> RentalOut:
         cart_no=record.cart.cart_no if record.cart else '',
         stage=record.stage,
         stage_display=record.stage_display,
+        is_overdue=record.is_overdue or False,
     )
 
 
@@ -68,11 +69,19 @@ def borrow_cart(request, payload: BorrowIn):
     if cart.status != 'available':
         raise HttpError(400, '该推车不可借出')
 
-    overdue_exists = RentalRecord.objects.filter(
+    overdue_unreturned = RentalRecord.objects.filter(
         user_phone=payload.user_phone,
-        stage='overdue'
-    ).exists()
-    if overdue_exists:
+        stage__in=['borrowing', 'overdue']
+    )
+    overdue_hours_threshold = settings.RENTAL_OVERDUE_HOURS
+    now_check = datetime.now()
+    can_borrow = True
+    for rec in overdue_unreturned:
+        duration = (now_check - rec.borrow_time).total_seconds() / 3600
+        if duration > overdue_hours_threshold or rec.stage == 'overdue':
+            can_borrow = False
+            break
+    if not can_borrow:
         raise HttpError(400, '该手机号存在逾期未还记录，不能借车')
 
     borrow_station = get_object_or_404(ServiceStation, id=payload.borrow_station_id)
@@ -87,6 +96,7 @@ def borrow_cart(request, payload: BorrowIn):
         borrow_station=borrow_station,
         cart=cart,
         stage='borrowing',
+        is_overdue=False,
     )
 
     cart.status = 'borrowed'
@@ -123,7 +133,7 @@ def return_cart(request, payload: ReturnIn):
     overdue_hours = settings.RENTAL_OVERDUE_HOURS
     borrow_duration = now - record.borrow_time
     if borrow_duration > timedelta(hours=overdue_hours):
-        record.stage = 'overdue'
+        record.is_overdue = True
 
     record.save()
     cart.save()
@@ -135,15 +145,19 @@ def return_cart(request, payload: ReturnIn):
 
 @router.get('/check-phone/{phone}')
 def check_phone(request, phone: str):
-    overdue_exists = RentalRecord.objects.filter(
+    overdue_hours_threshold = settings.RENTAL_OVERDUE_HOURS
+    now = datetime.now()
+    unreturned_records = RentalRecord.objects.filter(
         user_phone=phone,
-        stage='overdue'
-    ).exists()
-    if overdue_exists:
-        return {
-            'can_borrow': False,
-            'reason': '该手机号存在逾期未还记录，不能借车'
-        }
+        stage__in=['borrowing', 'overdue']
+    )
+    for rec in unreturned_records:
+        duration = (now - rec.borrow_time).total_seconds() / 3600
+        if duration > overdue_hours_threshold or rec.stage == 'overdue':
+            return {
+                'can_borrow': False,
+                'reason': '该手机号存在逾期未还记录，不能借车'
+            }
     return {
         'can_borrow': True,
         'reason': ''

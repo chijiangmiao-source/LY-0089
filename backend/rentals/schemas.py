@@ -28,6 +28,7 @@ class RentalOut(BaseModel):
     cart_no: str
     stage: str
     stage_display: str
+    is_overdue: bool = False
 
     class Config:
         from_attributes = True

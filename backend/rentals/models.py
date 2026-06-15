@@ -34,6 +34,7 @@ class RentalRecord(models.Model):
     )
     cart = models.ForeignKey('carts.Cart', on_delete=models.PROTECT, verbose_name='推车')
     stage = models.CharField(max_length=20, choices=STAGE_CHOICES, verbose_name='当前环节')
+    is_overdue = models.BooleanField(default=False, verbose_name='是否逾期')
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='创建时间')
     updated_at = models.DateTimeField(auto_now=True, verbose_name='更新时间')
 

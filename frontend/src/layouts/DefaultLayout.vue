@@ -6,9 +6,12 @@
           v-for="item in menuItems"
           :key="item.to"
           :to="item.to"
-          :prepend-icon="item.icon"
           :title="item.title"
-        />
+        >
+          <template #prepend>
+            <v-icon :icon="item.icon" size="20" />
+          </template>
+        </v-list-item>
       </v-list>
     </v-navigation-drawer>
 
@@ -17,11 +20,11 @@
       <v-app-bar-title>商场儿童推车管理系统</v-app-bar-title>
       <v-spacer></v-spacer>
       <v-btn v-if="auth.user" icon variant="text">
-        <v-icon>mdi-account-circle</v-icon>
+        <v-icon icon="mdi-account-circle" />
       </v-btn>
       <span v-if="auth.user" class="ml-2 mr-4">{{ auth.user.full_name || auth.user.username }}</span>
       <v-btn @click="handleLogout" variant="text">
-        <v-icon start>mdi-logout</v-icon>
+        <v-icon icon="mdi-logout" start />
         退出
       </v-btn>
     </v-app-bar>
