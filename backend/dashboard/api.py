@@ -14,6 +14,8 @@ from rentals.models import RentalRecord
 from reservations.models import CartReservation
 from maintenance.models import MaintenanceRecord
 from reservations.utils import cleanup_expired_reservations
+from venues.models import Venue
+from cross_venue_transfers.models import CrossVenueTransfer
 
 router = Router()
 
@@ -391,3 +393,225 @@ def get_floor_fault_distribution(request):
 
     result.sort(key=lambda x: x.total_faults, reverse=True)
     return result
+
+
+class VenueOverviewOut(BaseModel):
+    venue_id: int
+    venue_name: str
+    venue_type: str
+    venue_type_display: str
+    total_carts: int
+    available_carts: int
+    borrowed_carts: int
+    reserved_carts: int
+    stranded_carts: int
+    maintenance_carts: int
+    total_stations: int
+    active_reservations: int
+    today_borrow_count: int
+    today_return_count: int
+    pending_maintenance: int
+    shortage_count: int
+
+
+class CrossVenueShortageOut(BaseModel):
+    venue_id: int
+    venue_name: str
+    total_safety_stock: int
+    current_available: int
+    shortage: int
+    urgent_need: int
+    affected_stations: List[dict]
+
+
+class CrossVenueTransferRateOut(BaseModel):
+    total_cross_transfers: int
+    pending_approval: int
+    approved: int
+    rejected: int
+    in_transit: int
+    arrived: int
+    confirmed: int
+    completion_rate: float
+    urgent_count: int
+    avg_transport_hours: float
+    by_venue: List[dict]
+
+
+@router.get('/venue-overview', response=List[VenueOverviewOut])
+def get_venue_overview(request):
+    cleanup_expired_reservations()
+    now = timezone.now()
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+
+    venues = Venue.objects.filter(is_active=True)
+    result = []
+
+    for venue in venues:
+        stations = ServiceStation.objects.filter(venue_id=venue.id, is_active=True)
+        station_ids = list(stations.values_list('id', flat=True))
+
+        carts_qs = Cart.objects.filter(station_id__in=station_ids).exclude(status='scrapped')
+        total_carts = carts_qs.count()
+        available_carts = carts_qs.filter(status='available').count()
+        borrowed_carts = carts_qs.filter(status='borrowed').count()
+        reserved_carts = carts_qs.filter(status='reserved').count()
+        stranded_carts = carts_qs.filter(status='stranded').count()
+        maintenance_carts = carts_qs.filter(status='maintenance').count()
+
+        total_stations = stations.count()
+        active_reservations = CartReservation.objects.filter(
+            station_id__in=station_ids, status='active'
+        ).count()
+
+        today_borrow_count = RentalRecord.objects.filter(
+            borrow_station_id__in=station_ids,
+            borrow_time__gte=today_start
+        ).count()
+
+        today_return_count = RentalRecord.objects.filter(
+            return_station_id__in=station_ids,
+            return_time__gte=today_start
+        ).count()
+
+        pending_maintenance = MaintenanceRecord.objects.filter(
+            report_station_id__in=station_ids,
+            status__in=['pending', 'repairing']
+        ).count()
+
+        total_safety_stock = sum(s.safety_stock for s in stations)
+        shortage_count = max(0, total_safety_stock - available_carts)
+
+        result.append(VenueOverviewOut(
+            venue_id=venue.id,
+            venue_name=venue.name,
+            venue_type=venue.venue_type,
+            venue_type_display=venue.venue_type_display,
+            total_carts=total_carts,
+            available_carts=available_carts,
+            borrowed_carts=borrowed_carts,
+            reserved_carts=reserved_carts,
+            stranded_carts=stranded_carts,
+            maintenance_carts=maintenance_carts,
+            total_stations=total_stations,
+            active_reservations=active_reservations,
+            today_borrow_count=today_borrow_count,
+            today_return_count=today_return_count,
+            pending_maintenance=pending_maintenance,
+            shortage_count=shortage_count,
+        ))
+
+    return result
+
+
+@router.get('/cross-venue-shortage', response=List[CrossVenueShortageOut])
+def get_cross_venue_shortage(request, shortage_threshold: int = 1):
+    cleanup_expired_reservations()
+
+    venues = Venue.objects.filter(is_active=True)
+    result = []
+
+    for venue in venues:
+        stations = ServiceStation.objects.filter(venue_id=venue.id, is_active=True)
+        total_safety_stock = 0
+        current_available = 0
+        affected_stations = []
+        urgent_need = 0
+
+        for station in stations:
+            station_available = Cart.objects.filter(
+                station_id=station.id, status='available'
+            ).exclude(status__in=['maintenance', 'scrapped']).count()
+            station_shortage = max(0, station.safety_stock - station_available)
+
+            total_safety_stock += station.safety_stock
+            current_available += station_available
+
+            if station_shortage > 0:
+                if station_shortage >= station.safety_stock * 0.5:
+                    urgent_need += station_shortage
+                affected_stations.append({
+                    'station_id': station.id,
+                    'station_name': station.name,
+                    'floor': station.floor,
+                    'safety_stock': station.safety_stock,
+                    'current_available': station_available,
+                    'shortage': station_shortage,
+                })
+
+        total_shortage = max(0, total_safety_stock - current_available)
+
+        if total_shortage >= shortage_threshold:
+            result.append(CrossVenueShortageOut(
+                venue_id=venue.id,
+                venue_name=venue.name,
+                total_safety_stock=total_safety_stock,
+                current_available=current_available,
+                shortage=total_shortage,
+                urgent_need=urgent_need,
+                affected_stations=sorted(affected_stations, key=lambda x: x['shortage'], reverse=True),
+            ))
+
+    result.sort(key=lambda x: x.shortage, reverse=True)
+    return result
+
+
+@router.get('/cross-venue-transfer-rate', response=CrossVenueTransferRateOut)
+def get_cross_venue_transfer_rate(request, days: int = 30):
+    cleanup_expired_reservations()
+    now = timezone.now()
+    start_time = now - timedelta(days=days)
+
+    qs = CrossVenueTransfer.objects.filter(created_at__gte=start_time)
+    total = qs.count()
+    pending_approval = qs.filter(approval_status='pending').count()
+    approved = qs.filter(approval_status='approved').count()
+    rejected = qs.filter(approval_status='rejected').count()
+    in_transit = qs.filter(transport_status='in_transit').count()
+    arrived = qs.filter(transport_status='arrived').count()
+    confirmed = qs.filter(transport_status='confirmed').count()
+    urgent_count = qs.filter(priority='urgent').count()
+
+    completed = qs.filter(transport_status='confirmed')
+    completion_rate = round(confirmed / total * 100, 2) if total > 0 else 0.0
+
+    total_hours = 0
+    count = 0
+    for t in completed:
+        if t.shipped_at and t.confirmed_at:
+            hours = (t.confirmed_at - t.shipped_at).total_seconds() / 3600
+            total_hours += hours
+            count += 1
+    avg_transport_hours = round(total_hours / count, 2) if count > 0 else 0.0
+
+    by_venue = []
+    venues = Venue.objects.filter(is_active=True)
+    for venue in venues:
+        outgoing = qs.filter(from_venue_id=venue.id)
+        incoming = qs.filter(to_venue_id=venue.id)
+        out_total = outgoing.count()
+        out_confirmed = outgoing.filter(transport_status='confirmed').count()
+        out_rate = round(out_confirmed / out_total * 100, 2) if out_total > 0 else 0.0
+        by_venue.append({
+            'venue_id': venue.id,
+            'venue_name': venue.name,
+            'outgoing_total': out_total,
+            'outgoing_confirmed': out_confirmed,
+            'outgoing_completion_rate': out_rate,
+            'incoming_total': incoming.count(),
+            'incoming_pending': incoming.filter(transport_status__in=['in_transit', 'arrived']).count(),
+        })
+
+    return CrossVenueTransferRateOut(
+        total_cross_transfers=total,
+        pending_approval=pending_approval,
+        approved=approved,
+        rejected=rejected,
+        in_transit=in_transit,
+        arrived=arrived,
+        confirmed=confirmed,
+        completion_rate=completion_rate,
+        urgent_count=urgent_count,
+        avg_transport_hours=avg_transport_hours,
+        by_venue=by_venue,
+    )

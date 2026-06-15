@@ -46,6 +46,7 @@ const drawer = ref(true)
 
 const menuItems = [
   { title: '调度看板', to: '/dashboard', icon: 'mdi-view-dashboard' },
+  { title: '场地管理', to: '/venues', icon: 'mdi-domain' },
   { title: '服务点管理', to: '/stations', icon: 'mdi-map-marker' },
   { title: '推车档案', to: '/carts', icon: 'mdi-cart' },
   { title: '推车预约', to: '/reservations', icon: 'mdi-calendar-check' },
@@ -54,6 +55,7 @@ const menuItems = [
   { title: '借还记录', to: '/rentals', icon: 'mdi-history' },
   { title: '滞留上报', to: '/stranded', icon: 'mdi-alert-circle' },
   { title: '跨点调拨', to: '/transfers', icon: 'mdi-swap-horizontal' },
+  { title: '跨场地调拨', to: '/cross-venue-transfers', icon: 'mdi-truck-fast' },
   { title: '清洁复位', to: '/cleaning', icon: 'mdi-spray-bottle' },
   { title: '维修与报废', to: '/maintenance', icon: 'mdi-wrench' },
 ]

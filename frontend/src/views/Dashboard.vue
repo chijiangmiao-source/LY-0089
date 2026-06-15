@@ -238,6 +238,156 @@
         </v-card>
       </v-col>
     </v-row>
+
+    <v-divider class="my-6" />
+    <h2 class="mb-4 text-primary">多场地统一调度</h2>
+
+    <v-row>
+      <v-col cols="8">
+        <v-card>
+          <v-card-title>各场地运营概览</v-card-title>
+          <v-data-table
+            :headers="venueOverviewHeaders"
+            :items="venueOverviewList"
+            :items-per-page="5"
+            class="elevation-1"
+          >
+            <template #item.venue_type_display="{ item }">
+              <v-chip
+                :color="item.venue_type === 'mall' ? 'primary' : item.venue_type === 'park' ? 'success' : 'info'"
+                size="small"
+                variant="flat"
+              >
+                {{ item.venue_type_display }}
+              </v-chip>
+            </template>
+            <template #item.shortage_count="{ item }">
+              <span :class="item.shortage_count > 0 ? 'text-red font-bold' : ''">
+                {{ item.shortage_count }}
+              </span>
+            </template>
+            <template #item.today_borrow_count="{ item }">
+              <v-chip size="small" variant="flat" color="blue">借{{ item.today_borrow_count }}</v-chip>
+              <v-chip size="small" variant="flat" color="green" class="ml-1">还{{ item.today_return_count }}</v-chip>
+            </template>
+          </v-data-table>
+          <v-alert v-if="venueOverviewList.length === 0" type="info" class="ma-4" variant="tonal">
+            暂无场地数据，请先在场地管理中创建场地
+          </v-alert>
+        </v-card>
+      </v-col>
+      <v-col cols="4">
+        <v-card>
+          <v-card-title>跨场地调拨完成率（30天）</v-card-title>
+          <v-card-text>
+            <div class="mb-4">
+              <div class="d-flex justify-space-between mb-2">
+                <span>完成进度</span>
+                <span class="font-bold">{{ crossTransferRate.completion_rate || 0 }}%</span>
+              </div>
+              <v-progress-linear
+                :model-value="crossTransferRate.completion_rate || 0"
+                color="deep-purple"
+                height="12"
+                rounded
+              />
+            </div>
+            <v-row>
+              <v-col cols="4">
+                <div class="text-caption text-medium-emphasis">总申请</div>
+                <div class="text-h6 font-bold">{{ crossTransferRate.total || 0 }}</div>
+              </v-col>
+              <v-col cols="4">
+                <div class="text-caption text-medium-emphasis">已完成</div>
+                <div class="text-h6 font-bold text-green">{{ crossTransferRate.confirmed || 0 }}</div>
+              </v-col>
+              <v-col cols="4">
+                <div class="text-caption text-medium-emphasis">运输中</div>
+                <div class="text-h6 font-bold text-primary">{{ crossTransferRate.in_transit || 0 }}</div>
+              </v-col>
+              <v-col cols="4">
+                <div class="text-caption text-medium-emphasis">待审批</div>
+                <div class="text-h6 font-bold text-warning">{{ crossTransferRate.pending_approval || 0 }}</div>
+              </v-col>
+              <v-col cols="4">
+                <div class="text-caption text-medium-emphasis">紧急单</div>
+                <div class="text-h6 font-bold text-red">{{ crossTransferRate.urgent_count || 0 }}</div>
+              </v-col>
+              <v-col cols="4">
+                <div class="text-caption text-medium-emphasis">平均耗时</div>
+                <div class="text-h6 font-bold">{{ crossTransferRate.avg_transport_hours || 0 }}h</div>
+              </v-col>
+            </v-row>
+            <v-divider class="my-3" />
+            <div class="text-subtitle-2 font-bold mb-2">各场地调拨情况</div>
+            <v-data-table
+              :headers="venueTransferHeaders"
+              :items="crossTransferRate.by_venue || []"
+              :items-per-page="5"
+              density="compact"
+              hide-default-footer
+              class="elevation-0"
+            />
+          </v-card-text>
+        </v-card>
+      </v-col>
+    </v-row>
+
+    <v-row>
+      <v-col cols="12">
+        <v-card>
+          <v-card-title>
+            跨场地缺车预警
+            <v-spacer />
+            <v-chip color="red" size="small" variant="flat">
+              {{ crossVenueShortage.reduce((sum, v) => sum + v.shortage, 0) }} 台总缺车
+            </v-chip>
+          </v-card-title>
+          <v-data-table
+            :headers="shortageHeaders"
+            :items="crossVenueShortage"
+            :items-per-page="5"
+            class="elevation-1"
+          >
+            <template #item.shortage="{ item }">
+              <v-chip
+                :color="item.shortage >= item.total_safety_stock * 0.3 ? 'red' : 'orange'"
+                size="small"
+                variant="flat"
+                dark
+              >
+                缺 {{ item.shortage }}
+              </v-chip>
+            </template>
+            <template #item.urgent_need="{ item }">
+              <v-chip v-if="item.urgent_need > 0" color="red" size="small" variant="flat">
+                紧急 {{ item.urgent_need }}
+              </v-chip>
+              <span v-else>-</span>
+            </template>
+            <template #item.affected_stations="{ item }">
+              <div v-for="s in item.affected_stations.slice(0, 3)" :key="s.station_id" class="d-flex align-center mb-1">
+                <span class="text-caption">{{ s.floor }}F-{{ s.station_name }}</span>
+                <v-chip
+                  :color="s.shortage >= s.safety_stock * 0.5 ? 'red' : 'orange'"
+                  size="x-small"
+                  variant="flat"
+                  class="ml-2"
+                >
+                  缺{{ s.shortage }}
+                </v-chip>
+              </div>
+              <span v-if="item.affected_stations.length > 3" class="text-caption text-medium-emphasis">
+                另有 {{ item.affected_stations.length - 3 }} 个服务点缺车...
+              </span>
+            </template>
+          </v-data-table>
+          <v-alert v-if="crossVenueShortage.length === 0" type="success" class="ma-4" variant="tonal">
+            各场地库存充足，暂无缺车预警
+          </v-alert>
+        </v-card>
+      </v-col>
+    </v-row>
   </div>
 </template>
 
@@ -332,6 +482,65 @@ interface FloorFault {
   }>
 }
 
+interface VenueOverview {
+  venue_id: number
+  venue_name: string
+  venue_type: string
+  venue_type_display: string
+  total_carts: number
+  available_carts: number
+  borrowed_carts: number
+  reserved_carts: number
+  stranded_carts: number
+  maintenance_carts: number
+  total_stations: number
+  active_reservations: number
+  today_borrow_count: number
+  today_return_count: number
+  pending_maintenance: number
+  shortage_count: number
+}
+
+interface CrossVenueShortage {
+  venue_id: number
+  venue_name: string
+  total_safety_stock: number
+  current_available: number
+  shortage: number
+  urgent_need: number
+  affected_stations: Array<{
+    station_id: number
+    station_name: string
+    floor: number
+    safety_stock: number
+    current_available: number
+    shortage: number
+  }>
+}
+
+interface CrossVenueTransferRate {
+  total_cross_transfers?: number
+  pending_approval?: number
+  approved?: number
+  rejected?: number
+  in_transit?: number
+  arrived?: number
+  confirmed?: number
+  completion_rate?: number
+  urgent_count?: number
+  avg_transport_hours?: number
+  total?: number
+  by_venue?: Array<{
+    venue_id: number
+    venue_name: string
+    outgoing_total: number
+    outgoing_confirmed: number
+    outgoing_completion_rate: number
+    incoming_total: number
+    incoming_pending: number
+  }>
+}
+
 const overview = ref<Overview>({})
 const floorShortage = ref<FloorShortage[]>([])
 const strandedDistribution = ref<StrandedItem[]>([])
@@ -340,6 +549,9 @@ const overdueList = ref<OverdueItem[]>([])
 const expiringReservations = ref<ExpiringReservation[]>([])
 const floorReservationHeat = ref<FloorHeat[]>([])
 const floorFaultDistribution = ref<FloorFault[]>([])
+const venueOverviewList = ref<VenueOverview[]>([])
+const crossVenueShortage = ref<CrossVenueShortage[]>([])
+const crossTransferRate = ref<CrossVenueTransferRate>({})
 
 let refreshTimer: ReturnType<typeof setInterval> | null = null
 
@@ -385,6 +597,34 @@ const floorHeatHeaders = [
   { title: '当前预约数', key: 'active_reservations' },
 ]
 
+const venueOverviewHeaders = [
+  { title: '场地名称', key: 'venue_name' },
+  { title: '类型', key: 'venue_type_display' },
+  { title: '总推车', key: 'total_carts' },
+  { title: '可用', key: 'available_carts' },
+  { title: '借出', key: 'borrowed_carts' },
+  { title: '服务点', key: 'total_stations' },
+  { title: '今日借/还', key: 'today_borrow_count' },
+  { title: '待维修', key: 'pending_maintenance' },
+  { title: '缺车数', key: 'shortage_count' },
+]
+
+const venueTransferHeaders = [
+  { title: '场地', key: 'venue_name' },
+  { title: '发出', key: 'outgoing_total' },
+  { title: '发出完成率', key: 'outgoing_completion_rate' },
+  { title: '收到', key: 'incoming_total' },
+]
+
+const shortageHeaders = [
+  { title: '场地名称', key: 'venue_name' },
+  { title: '安全保有总量', key: 'total_safety_stock' },
+  { title: '当前可用', key: 'current_available' },
+  { title: '缺车数', key: 'shortage' },
+  { title: '紧急需求', key: 'urgent_need' },
+  { title: '受影响服务点', key: 'affected_stations' },
+]
+
 const formatTime = (time: string) => {
   return dayjs(time).format('YYYY-MM-DD HH:mm:ss')
 }
@@ -399,6 +639,9 @@ const loadDashboardData = async () => {
     loadExpiringReservations(),
     loadFloorReservationHeat(),
     loadFloorFaultDistribution(),
+    loadVenueOverview(),
+    loadCrossVenueShortage(),
+    loadCrossVenueTransferRate(),
   ])
 }
 
@@ -484,6 +727,47 @@ const loadFloorFaultDistribution = async () => {
     floorFaultDistribution.value = res.data.data || res.data || []
   } catch (e) {
     console.error('加载楼层故障分布失败', e)
+  }
+}
+
+const loadVenueOverview = async () => {
+  try {
+    const res = await axios.get('/dashboard/venue-overview')
+    venueOverviewList.value = res.data.data || res.data || []
+  } catch (e) {
+    console.error('加载各场地运营概览失败', e)
+  }
+}
+
+const loadCrossVenueShortage = async () => {
+  try {
+    const res = await axios.get('/dashboard/cross-venue-shortage')
+    crossVenueShortage.value = res.data.data || res.data || []
+  } catch (e) {
+    console.error('加载跨场地缺车预警失败', e)
+  }
+}
+
+const loadCrossVenueTransferRate = async () => {
+  try {
+    const res = await axios.get('/dashboard/cross-venue-transfer-rate?days=30')
+    const data = res.data.data || res.data || {}
+    crossTransferRate.value = {
+      total_cross_transfers: data.total_cross_transfers,
+      pending_approval: data.pending_approval,
+      approved: data.approved,
+      rejected: data.rejected,
+      in_transit: data.in_transit,
+      arrived: data.arrived,
+      confirmed: data.confirmed,
+      completion_rate: data.completion_rate,
+      urgent_count: data.urgent_count,
+      avg_transport_hours: data.avg_transport_hours,
+      total: data.total_cross_transfers,
+      by_venue: data.by_venue,
+    }
+  } catch (e) {
+    console.error('加载跨场地调拨完成率失败', e)
   }
 }
 

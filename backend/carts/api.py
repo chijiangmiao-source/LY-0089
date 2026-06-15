@@ -3,6 +3,7 @@ from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from ninja import Router, Query
 from ninja.pagination import paginate
+from typing import Optional
 
 from reservations.utils import cleanup_expired_reservations
 from .models import Cart
@@ -13,11 +14,18 @@ router = Router()
 
 
 def cart_to_out(cart: Cart) -> CartOut:
+    venue_id = None
+    venue_name = None
+    if cart.station and cart.station.venue:
+        venue_id = cart.station.venue_id
+        venue_name = cart.station.venue.name
     return CartOut(
         id=cart.id,
         cart_no=cart.cart_no,
         station_id=cart.station_id,
         station_name=cart.station.name if cart.station else '',
+        venue_id=venue_id,
+        venue_name=venue_name,
         cart_type=cart.cart_type,
         status=cart.status,
         status_display=cart.status_display,
@@ -29,16 +37,35 @@ def cart_to_out(cart: Cart) -> CartOut:
 
 @router.get('/', response=list[CartOut])
 @paginate
-def list_carts(request):
+def list_carts(request, venue_id: Optional[int] = None, station_id: Optional[int] = None, status: Optional[str] = None):
     cleanup_expired_reservations()
-    queryset = Cart.objects.select_related('station').all()
+    queryset = Cart.objects.select_related('station__venue').all()
+    if venue_id is not None:
+        queryset = queryset.filter(station__venue_id=venue_id)
+    if station_id is not None:
+        queryset = queryset.filter(station_id=station_id)
+    if status is not None:
+        queryset = queryset.filter(status=status)
+    return [cart_to_out(cart) for cart in queryset]
+
+
+@router.get('/all', response=list[CartOut])
+def list_all_carts(request, venue_id: Optional[int] = None, station_id: Optional[int] = None, status: Optional[str] = None):
+    cleanup_expired_reservations()
+    queryset = Cart.objects.select_related('station__venue').all()
+    if venue_id is not None:
+        queryset = queryset.filter(station__venue_id=venue_id)
+    if station_id is not None:
+        queryset = queryset.filter(station_id=station_id)
+    if status is not None:
+        queryset = queryset.filter(status=status)
     return [cart_to_out(cart) for cart in queryset]
 
 
 @router.get('/{cart_id}', response=CartOut)
 def get_cart(request, cart_id: int):
     cleanup_expired_reservations()
-    cart = get_object_or_404(Cart.objects.select_related('station'), id=cart_id)
+    cart = get_object_or_404(Cart.objects.select_related('station__venue'), id=cart_id)
     return cart_to_out(cart)
 
 
@@ -52,7 +79,7 @@ def create_cart(request, payload: CartIn):
         last_clean_time=payload.last_clean_time,
     )
     cart.refresh_from_db()
-    cart = Cart.objects.select_related('station').get(id=cart.id)
+    cart = Cart.objects.select_related('station__venue').get(id=cart.id)
     return cart_to_out(cart)
 
 
@@ -65,7 +92,7 @@ def update_cart(request, cart_id: int, payload: CartIn):
     cart.status = payload.status
     cart.last_clean_time = payload.last_clean_time
     cart.save()
-    cart = Cart.objects.select_related('station').get(id=cart.id)
+    cart = Cart.objects.select_related('station__venue').get(id=cart.id)
     return cart_to_out(cart)
 
 
@@ -78,7 +105,7 @@ def delete_cart(request, cart_id: int):
 
 @router.post('/{cart_id}/clean', response=CartOut)
 def clean_cart(request, cart_id: int):
-    cart = get_object_or_404(Cart.objects.select_related('station'), id=cart_id)
+    cart = get_object_or_404(Cart.objects.select_related('station__venue'), id=cart_id)
     if cart.status == 'maintenance':
         from ninja.errors import HttpError
         raise HttpError(400, '维修中的推车不能进行清洁操作')

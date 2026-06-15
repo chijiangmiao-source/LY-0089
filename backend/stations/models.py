@@ -2,6 +2,7 @@ from django.db import models
 
 
 class ServiceStation(models.Model):
+    venue = models.ForeignKey('venues.Venue', on_delete=models.PROTECT, related_name='stations', null=True, blank=True, verbose_name='所属场地')
     name = models.CharField(max_length=100, verbose_name='服务点名')
     floor = models.IntegerField(verbose_name='楼层')
     location = models.CharField(max_length=255, verbose_name='位置描述')

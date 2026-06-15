@@ -4,6 +4,7 @@ from typing import Optional
 
 
 class StationIn(BaseModel):
+    venue_id: Optional[int] = Field(None, description='所属场地ID')
     name: str = Field(..., max_length=100, description='服务点名')
     floor: int = Field(..., description='楼层')
     location: str = Field(..., max_length=255, description='位置描述')
@@ -13,6 +14,8 @@ class StationIn(BaseModel):
 
 class StationOut(BaseModel):
     id: int
+    venue_id: Optional[int] = None
+    venue_name: Optional[str] = None
     name: str
     floor: int
     location: str
