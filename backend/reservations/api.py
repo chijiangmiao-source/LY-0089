@@ -92,6 +92,11 @@ def create_reservation(request, payload: ReservationCreateIn):
     if not available_cart:
         raise HttpError(400, '该服务点暂无可用推车')
 
+    if available_cart.status == 'maintenance':
+        raise HttpError(400, '该推车正在维修中，不可预约')
+    if available_cart.status == 'scrapped':
+        raise HttpError(400, '该推车已报废，不可预约')
+
     now = timezone.now()
     expire_minutes = getattr(settings, 'RESERVATION_EXPIRE_MINUTES', 15)
     expire_time = now + timedelta(minutes=expire_minutes)

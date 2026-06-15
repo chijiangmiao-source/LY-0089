@@ -72,6 +72,10 @@ def get_rental(request, rental_id: int):
 def borrow_cart(request, payload: BorrowIn):
     cleanup_expired_reservations()
     cart = get_object_or_404(Cart, id=payload.cart_id)
+    if cart.status == 'maintenance':
+        raise HttpError(400, '该推车正在维修中，不可借出')
+    if cart.status == 'scrapped':
+        raise HttpError(400, '该推车已报废，不可借出')
     if cart.status not in ['available', 'reserved']:
         raise HttpError(400, '该推车不可借出')
 

@@ -12,6 +12,7 @@ from stranded.models import StrandedRecord
 from transfers.models import TransferOrder
 from rentals.models import RentalRecord
 from reservations.models import CartReservation
+from maintenance.models import MaintenanceRecord
 from reservations.utils import cleanup_expired_reservations
 
 router = Router()
@@ -24,6 +25,8 @@ class OverviewOut(BaseModel):
     borrowed_carts: int
     stranded_carts: int
     transferring_carts: int
+    maintenance_carts: int
+    scrapped_carts: int
     total_stations: int
     active_reservations: int
 
@@ -93,15 +96,25 @@ class FloorReservationHeatOut(BaseModel):
     stations: List[dict]
 
 
+class FloorFaultOut(BaseModel):
+    floor: int
+    total_faults: int
+    pending_count: int
+    repairing_count: int
+    stations: List[dict]
+
+
 @router.get('/overview', response=OverviewOut)
 def get_overview(request):
     cleanup_expired_reservations()
-    total_carts = Cart.objects.count()
+    total_carts = Cart.objects.exclude(status='scrapped').count()
     available_carts = Cart.objects.filter(status='available').count()
     reserved_carts = Cart.objects.filter(status='reserved').count()
     borrowed_carts = Cart.objects.filter(status='borrowed').count()
     stranded_carts = Cart.objects.filter(status='stranded').count()
     transferring_carts = Cart.objects.filter(status='transferring').count()
+    maintenance_carts = Cart.objects.filter(status='maintenance').count()
+    scrapped_carts = Cart.objects.filter(status='scrapped').count()
     total_stations = ServiceStation.objects.filter(is_active=True).count()
     active_reservations = CartReservation.objects.filter(status='active').count()
 
@@ -112,6 +125,8 @@ def get_overview(request):
         borrowed_carts=borrowed_carts,
         stranded_carts=stranded_carts,
         transferring_carts=transferring_carts,
+        maintenance_carts=maintenance_carts,
+        scrapped_carts=scrapped_carts,
         total_stations=total_stations,
         active_reservations=active_reservations,
     )
@@ -124,7 +139,9 @@ def get_floor_shortage(request):
     floor_data = {}
 
     for station in stations:
-        current_count = Cart.objects.filter(station_id=station.id, status='available').count()
+        current_count = Cart.objects.filter(
+            station_id=station.id, status='available'
+        ).exclude(status__in=['maintenance', 'scrapped']).count()
         shortage_count = max(0, station.safety_stock - current_count)
 
         if station.floor not in floor_data:
@@ -136,7 +153,9 @@ def get_floor_shortage(request):
                 'stations': [],
             }
 
-        station_carts_total = Cart.objects.filter(station_id=station.id).count()
+        station_carts_total = Cart.objects.filter(
+            station_id=station.id
+        ).exclude(status='scrapped').count()
         floor_data[station.floor]['total_carts'] += station_carts_total
         floor_data[station.floor]['available_carts'] += current_count
         floor_data[station.floor]['safety_stock_sum'] += station.safety_stock
@@ -324,4 +343,51 @@ def get_floor_reservation_heat(request, hours: int = 24):
         result.append(FloorReservationHeatOut(**data))
 
     result.sort(key=lambda x: x.total_reservations, reverse=True)
+    return result
+
+
+@router.get('/floor-fault-distribution', response=List[FloorFaultOut])
+def get_floor_fault_distribution(request):
+    cleanup_expired_reservations()
+    stations = ServiceStation.objects.filter(is_active=True).order_by('floor')
+    floor_data = {}
+
+    for station in stations:
+        pending_records = MaintenanceRecord.objects.filter(
+            report_station_id=station.id,
+            status='pending'
+        ).count()
+        repairing_records = MaintenanceRecord.objects.filter(
+            report_station_id=station.id,
+            status='repairing'
+        ).count()
+        station_total = pending_records + repairing_records
+
+        if station.floor not in floor_data:
+            floor_data[station.floor] = {
+                'floor': station.floor,
+                'total_faults': 0,
+                'pending_count': 0,
+                'repairing_count': 0,
+                'stations': [],
+            }
+
+        floor_data[station.floor]['total_faults'] += station_total
+        floor_data[station.floor]['pending_count'] += pending_records
+        floor_data[station.floor]['repairing_count'] += repairing_records
+        floor_data[station.floor]['stations'].append({
+            'station_id': station.id,
+            'station_name': station.name,
+            'total_faults': station_total,
+            'pending_count': pending_records,
+            'repairing_count': repairing_records,
+        })
+
+    result = []
+    for floor in sorted(floor_data.keys()):
+        data = floor_data[floor]
+        data['stations'].sort(key=lambda x: x['total_faults'], reverse=True)
+        result.append(FloorFaultOut(**data))
+
+    result.sort(key=lambda x: x.total_faults, reverse=True)
     return result

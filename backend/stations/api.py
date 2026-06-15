@@ -16,7 +16,12 @@ def list_stations(request):
     stations = ServiceStation.objects.all()
     result = []
     for station in stations:
-        current_count = Cart.objects.filter(station_id=station.id, status='available').count()
+        current_count = Cart.objects.filter(
+            station_id=station.id,
+            status='available'
+        ).exclude(
+            status__in=['maintenance', 'scrapped']
+        ).count()
         station_data = {
             'id': station.id,
             'name': station.name,
@@ -36,7 +41,12 @@ def list_stations(request):
 def get_station(request, station_id: int):
     cleanup_expired_reservations()
     station = get_object_or_404(ServiceStation, id=station_id)
-    current_count = Cart.objects.filter(station_id=station.id, status='available').count()
+    current_count = Cart.objects.filter(
+        station_id=station.id,
+        status='available'
+    ).exclude(
+        status__in=['maintenance', 'scrapped']
+    ).count()
     return {
         'id': station.id,
         'name': station.name,
@@ -53,7 +63,12 @@ def get_station(request, station_id: int):
 @router.post('/', response=StationOut)
 def create_station(request, payload: StationIn):
     station = ServiceStation.objects.create(**payload.model_dump())
-    current_count = Cart.objects.filter(station_id=station.id, status='available').count()
+    current_count = Cart.objects.filter(
+        station_id=station.id,
+        status='available'
+    ).exclude(
+        status__in=['maintenance', 'scrapped']
+    ).count()
     return {
         'id': station.id,
         'name': station.name,
@@ -73,7 +88,12 @@ def update_station(request, station_id: int, payload: StationIn):
     for attr, value in payload.model_dump().items():
         setattr(station, attr, value)
     station.save()
-    current_count = Cart.objects.filter(station_id=station.id, status='available').count()
+    current_count = Cart.objects.filter(
+        station_id=station.id,
+        status='available'
+    ).exclude(
+        status__in=['maintenance', 'scrapped']
+    ).count()
     return {
         'id': station.id,
         'name': station.name,

@@ -55,6 +55,7 @@ const menuItems = [
   { title: '滞留上报', to: '/stranded', icon: 'mdi-alert-circle' },
   { title: '跨点调拨', to: '/transfers', icon: 'mdi-swap-horizontal' },
   { title: '清洁复位', to: '/cleaning', icon: 'mdi-spray-bottle' },
+  { title: '维修与报废', to: '/maintenance', icon: 'mdi-wrench' },
 ]
 
 function handleLogout() {

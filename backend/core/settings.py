@@ -28,6 +28,7 @@ INSTALLED_APPS = [
     'stranded',
     'dashboard',
     'reservations',
+    'maintenance',
 ]
 
 MIDDLEWARE = [

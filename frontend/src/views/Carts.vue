@@ -152,20 +152,26 @@ const form = ref<Cart>({
 
 const statusMap: Record<string, string> = {
   available: '可用',
+  reserved: '已预约',
   borrowed: '借出中',
   stranded: '滞留',
   transferring: '调拨中',
   cleaning: '清洁中',
   reset_check: '复位检查中',
+  maintenance: '维修中',
+  scrapped: '已报废',
 }
 
 const statusColorMap: Record<string, string> = {
   available: 'success',
+  reserved: 'purple',
   borrowed: 'primary',
   stranded: 'error',
   transferring: 'warning',
   cleaning: 'info',
   reset_check: 'warning',
+  maintenance: 'brown',
+  scrapped: 'grey',
 }
 
 const cartTypeMap: Record<string, string> = {

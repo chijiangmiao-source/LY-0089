@@ -59,6 +59,10 @@ def get_stranded(request, record_id: int):
 @transaction.atomic
 def report_stranded(request, payload: StrandedReportIn):
     cart = get_object_or_404(Cart, id=payload.cart_id)
+    if cart.status == 'maintenance':
+        raise HttpError(400, '维修中的推车不能上报滞留')
+    if cart.status == 'scrapped':
+        raise HttpError(400, '已报废的推车不能上报滞留')
     if cart.status == 'transferring':
         raise HttpError(400, '调拨中的推车不能上报滞留')
     if cart.status == 'reserved':

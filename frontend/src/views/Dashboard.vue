@@ -3,7 +3,7 @@
     <h1 class="mb-6">调度看板</h1>
 
     <v-row>
-      <v-col cols="2">
+      <v-col cols="1.5">
         <v-card color="blue-darken-1" dark height="100%">
           <v-card-text>
             <div class="text-caption">推车总数</div>
@@ -11,7 +11,7 @@
           </v-card-text>
         </v-card>
       </v-col>
-      <v-col cols="2">
+      <v-col cols="1.5">
         <v-card color="green-darken-1" dark height="100%">
           <v-card-text>
             <div class="text-caption">可用推车</div>
@@ -19,15 +19,15 @@
           </v-card-text>
         </v-card>
       </v-col>
-      <v-col cols="2">
+      <v-col cols="1.5">
         <v-card color="purple-darken-1" dark height="100%">
           <v-card-text>
-            <div class="text-caption">预约中推车</div>
+            <div class="text-caption">预约中</div>
             <div class="text-h4 font-bold">{{ overview.reserved_carts || 0 }}</div>
           </v-card-text>
         </v-card>
       </v-col>
-      <v-col cols="2">
+      <v-col cols="1.5">
         <v-card color="orange-darken-1" dark height="100%">
           <v-card-text>
             <div class="text-caption">借出中</div>
@@ -35,7 +35,7 @@
           </v-card-text>
         </v-card>
       </v-col>
-      <v-col cols="2">
+      <v-col cols="1.5">
         <v-card color="red-darken-1" dark height="100%">
           <v-card-text>
             <div class="text-caption">滞留中</div>
@@ -43,10 +43,26 @@
           </v-card-text>
         </v-card>
       </v-col>
-      <v-col cols="2">
+      <v-col cols="1.5">
+        <v-card color="brown-darken-1" dark height="100%">
+          <v-card-text>
+            <div class="text-caption">维修中</div>
+            <div class="text-h4 font-bold">{{ overview.maintenance_carts || 0 }}</div>
+          </v-card-text>
+        </v-card>
+      </v-col>
+      <v-col cols="1.5">
+        <v-card color="grey-darken-3" dark height="100%">
+          <v-card-text>
+            <div class="text-caption">已报废</div>
+            <div class="text-h4 font-bold">{{ overview.scrapped_carts || 0 }}</div>
+          </v-card-text>
+        </v-card>
+      </v-col>
+      <v-col cols="1.5">
         <v-card color="indigo-darken-1" dark height="100%">
           <v-card-text>
-            <div class="text-caption">有效预约数</div>
+            <div class="text-caption">有效预约</div>
             <div class="text-h4 font-bold">{{ overview.active_reservations || 0 }}</div>
           </v-card-text>
         </v-card>
@@ -54,7 +70,7 @@
     </v-row>
 
     <v-row>
-      <v-col cols="8">
+      <v-col cols="7">
         <v-card>
           <v-card-title>各楼层缺车情况</v-card-title>
           <v-data-table
@@ -69,7 +85,7 @@
           </v-data-table>
         </v-card>
       </v-col>
-      <v-col cols="4">
+      <v-col cols="5">
         <v-card>
           <v-card-title>调拨完成率</v-card-title>
           <v-card-text>
@@ -107,25 +123,38 @@
     <v-row>
       <v-col cols="6">
         <v-card>
-          <v-card-title>即将超时预约（5分钟内）</v-card-title>
+          <v-card-title>各楼层故障分布</v-card-title>
           <v-data-table
-            :headers="expiringHeaders"
-            :items="expiringReservations"
+            :headers="floorFaultHeaders"
+            :items="floorFaultDistribution"
             :items-per-page="5"
             class="elevation-1"
           >
-            <template #item.expire_time="{ item }">
-              <span class="text-orange font-bold">
-                {{ formatTime(item.expire_time) }}
-                <span class="text-caption">（还剩{{ item.minutes_left }}分钟）</span>
-              </span>
+            <template #item.total_faults="{ item }">
+              <v-chip
+                :color="item.total_faults > 5 ? 'red' : item.total_faults > 2 ? 'orange' : 'green'"
+                size="small"
+                variant="flat"
+                dark
+              >
+                {{ item.total_faults }}
+              </v-chip>
             </template>
-            <template #item.reserve_time="{ item }">
-              {{ formatTime(item.reserve_time) }}
+            <template #item.pending_count="{ item }">
+              <span v-if="item.pending_count > 0" class="text-warning font-bold">
+                {{ item.pending_count }}
+              </span>
+              <span v-else>{{ item.pending_count }}</span>
+            </template>
+            <template #item.repairing_count="{ item }">
+              <span v-if="item.repairing_count > 0" class="text-info font-bold">
+                {{ item.repairing_count }}
+              </span>
+              <span v-else>{{ item.repairing_count }}</span>
             </template>
           </v-data-table>
-          <v-alert v-if="expiringReservations.length === 0" type="success" class="ma-4" variant="tonal">
-            当前无即将超时的预约
+          <v-alert v-if="floorFaultDistribution.length === 0" type="success" class="ma-4" variant="tonal">
+            当前无故障记录
           </v-alert>
         </v-card>
       </v-col>
@@ -156,6 +185,30 @@
     <v-row>
       <v-col cols="6">
         <v-card>
+          <v-card-title>即将超时预约（5分钟内）</v-card-title>
+          <v-data-table
+            :headers="expiringHeaders"
+            :items="expiringReservations"
+            :items-per-page="5"
+            class="elevation-1"
+          >
+            <template #item.expire_time="{ item }">
+              <span class="text-orange font-bold">
+                {{ formatTime(item.expire_time) }}
+                <span class="text-caption">（还剩{{ item.minutes_left }}分钟）</span>
+              </span>
+            </template>
+            <template #item.reserve_time="{ item }">
+              {{ formatTime(item.reserve_time) }}
+            </template>
+          </v-data-table>
+          <v-alert v-if="expiringReservations.length === 0" type="success" class="ma-4" variant="tonal">
+            当前无即将超时的预约
+          </v-alert>
+        </v-card>
+      </v-col>
+      <v-col cols="6">
+        <v-card>
           <v-card-title>滞留时长分布</v-card-title>
           <v-data-table
             :headers="strandedHeaders"
@@ -166,7 +219,10 @@
           />
         </v-card>
       </v-col>
-      <v-col cols="6">
+    </v-row>
+
+    <v-row>
+      <v-col cols="12">
         <v-card>
           <v-card-title>逾期未还列表</v-card-title>
           <v-data-table
@@ -197,14 +253,16 @@ interface Overview {
   borrowed_carts?: number
   stranded_carts?: number
   transferring_carts?: number
+  maintenance_carts?: number
+  scrapped_carts?: number
   total_stations?: number
   active_reservations?: number
 }
 
 interface FloorShortage {
   floor: string
-  total: number
-  available: number
+  total_carts: number
+  available_carts: number
   shortage: number
 }
 
@@ -214,10 +272,10 @@ interface StrandedItem {
 }
 
 interface TransferRate {
-  total?: number
-  completed?: number
-  in_progress?: number
-  pending?: number
+  total_transfers?: number
+  completed_transfers?: number
+  in_progress_transfers?: number
+  pending_transfers?: number
   completion_rate?: number
 }
 
@@ -260,6 +318,20 @@ interface FloorHeat {
   }>
 }
 
+interface FloorFault {
+  floor: number
+  total_faults: number
+  pending_count: number
+  repairing_count: number
+  stations: Array<{
+    station_id: number
+    station_name: string
+    total_faults: number
+    pending_count: number
+    repairing_count: number
+  }>
+}
+
 const overview = ref<Overview>({})
 const floorShortage = ref<FloorShortage[]>([])
 const strandedDistribution = ref<StrandedItem[]>([])
@@ -267,14 +339,22 @@ const transferRate = ref<TransferRate>({})
 const overdueList = ref<OverdueItem[]>([])
 const expiringReservations = ref<ExpiringReservation[]>([])
 const floorReservationHeat = ref<FloorHeat[]>([])
+const floorFaultDistribution = ref<FloorFault[]>([])
 
 let refreshTimer: ReturnType<typeof setInterval> | null = null
 
 const floorHeaders = [
   { title: '楼层', key: 'floor' },
-  { title: '总车数', key: 'total' },
-  { title: '可用数', key: 'available' },
+  { title: '总车数', key: 'total_carts' },
+  { title: '可用数', key: 'available_carts' },
   { title: '缺车数', key: 'shortage' },
+]
+
+const floorFaultHeaders = [
+  { title: '楼层', key: 'floor' },
+  { title: '故障总数', key: 'total_faults' },
+  { title: '待维修', key: 'pending_count' },
+  { title: '维修中', key: 'repairing_count' },
 ]
 
 const strandedHeaders = [
@@ -318,6 +398,7 @@ const loadDashboardData = async () => {
     loadOverdueList(),
     loadExpiringReservations(),
     loadFloorReservationHeat(),
+    loadFloorFaultDistribution(),
   ])
 }
 
@@ -342,7 +423,13 @@ const loadFloorShortage = async () => {
 const loadStrandedDistribution = async () => {
   try {
     const res = await axios.get('/dashboard/stranded-distribution')
-    strandedDistribution.value = res.data.data || res.data || []
+    const data = res.data.data || res.data || {}
+    strandedDistribution.value = [
+      { range: '< 1小时', count: data.less_than_1h || 0 },
+      { range: '1-4小时', count: data.one_to_4h || 0 },
+      { range: '4-12小时', count: data.four_to_12h || 0 },
+      { range: '> 12小时', count: data.more_than_12h || 0 },
+    ]
   } catch (e) {
     console.error('加载滞留分布数据失败', e)
   }
@@ -351,7 +438,14 @@ const loadStrandedDistribution = async () => {
 const loadTransferRate = async () => {
   try {
     const res = await axios.get('/dashboard/transfer-rate')
-    transferRate.value = res.data.data || res.data || {}
+    const data = res.data.data || res.data || {}
+    transferRate.value = {
+      total_transfers: data.total_transfers,
+      completed_transfers: data.completed_transfers,
+      in_progress_transfers: data.in_progress_transfers,
+      pending_transfers: data.pending_transfers,
+      completion_rate: data.completion_rate,
+    }
   } catch (e) {
     console.error('加载调拨完成率数据失败', e)
   }
@@ -381,6 +475,15 @@ const loadFloorReservationHeat = async () => {
     floorReservationHeat.value = res.data.data || res.data || []
   } catch (e) {
     console.error('加载楼层预约热度失败', e)
+  }
+}
+
+const loadFloorFaultDistribution = async () => {
+  try {
+    const res = await axios.get('/dashboard/floor-fault-distribution')
+    floorFaultDistribution.value = res.data.data || res.data || []
+  } catch (e) {
+    console.error('加载楼层故障分布失败', e)
   }
 }
 

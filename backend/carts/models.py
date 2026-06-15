@@ -15,6 +15,8 @@ class Cart(models.Model):
         ('transferring', '调拨中'),
         ('cleaning', '清洁中'),
         ('reset_check', '复位检查中'),
+        ('maintenance', '维修中'),
+        ('scrapped', '已报废'),
     ]
 
     STATUS_DISPLAY = {
@@ -25,6 +27,8 @@ class Cart(models.Model):
         'transferring': '调拨中',
         'cleaning': '清洁中',
         'reset_check': '复位检查中',
+        'maintenance': '维修中',
+        'scrapped': '已报废',
     }
 
     cart_no = models.CharField(max_length=50, unique=True, verbose_name='推车编号')

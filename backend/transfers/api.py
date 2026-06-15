@@ -68,6 +68,10 @@ def get_transfer(request, transfer_id: int):
 @transaction.atomic
 def create_transfer(request, payload: TransferCreateIn):
     cart = get_object_or_404(Cart, id=payload.cart_id)
+    if cart.status == 'maintenance':
+        raise HttpError(400, '该推车正在维修中，不允许调拨')
+    if cart.status == 'scrapped':
+        raise HttpError(400, '该推车已报废，不允许调拨')
     if cart.status != 'available':
         if cart.status == 'reserved':
             raise HttpError(400, '该推车已被预约，不允许调拨')
@@ -155,14 +159,18 @@ def get_priority_queue(request):
     stations = ServiceStation.objects.filter(is_active=True)
     result = []
     for station in stations:
-        current_count = Cart.objects.filter(station_id=station.id, status='available').count()
+        current_count = Cart.objects.filter(
+            station_id=station.id, status='available'
+        ).exclude(status__in=['maintenance', 'scrapped']).count()
         shortage = station.safety_stock - current_count
         if shortage > 0:
             recommended_source = None
             source_stations = ServiceStation.objects.filter(is_active=True).exclude(id=station.id)
             max_surplus = 0
             for src in source_stations:
-                src_count = Cart.objects.filter(station_id=src.id, status='available').count()
+                src_count = Cart.objects.filter(
+                    station_id=src.id, status='available'
+                ).exclude(status__in=['maintenance', 'scrapped']).count()
                 surplus = src_count - src.safety_stock
                 if surplus > max_surplus:
                     max_surplus = surplus

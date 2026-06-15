@@ -79,6 +79,12 @@ def delete_cart(request, cart_id: int):
 @router.post('/{cart_id}/clean', response=CartOut)
 def clean_cart(request, cart_id: int):
     cart = get_object_or_404(Cart.objects.select_related('station'), id=cart_id)
+    if cart.status == 'maintenance':
+        from ninja.errors import HttpError
+        raise HttpError(400, '维修中的推车不能进行清洁操作')
+    if cart.status == 'scrapped':
+        from ninja.errors import HttpError
+        raise HttpError(400, '已报废的推车不能进行清洁操作')
     cart.last_clean_time = timezone.now()
     cart.status = 'available'
     cart.save()
